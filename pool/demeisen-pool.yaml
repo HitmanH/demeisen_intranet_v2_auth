@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Demeisen's shared sign-in (Cognito user pool): the people, their passwords and authenticator-app enrolment.
+  This is data, so the pool and its sign-in domain are kept if this stack is deleted, deletion protection is on,
+  and a stack policy (pool/stack-policy.json) blocks any update that would replace or delete them.
+  The existing pool (eu-west-2_o84PDILyl, first created by the v1 CRM stack) is adopted into this stack with
+  pool/import.sh, so nobody has to re-enrol. For a new organisation, use cognito/user-pool.yaml instead.
+
+Parameters:
+  PoolName: { Type: String, Default: demeisen-crm-poc, Description: 'Keep the existing name when importing' }
+  DomainPrefix: { Type: String, Default: demeisen-crm-poc, Description: 'Changing this replaces the domain, so keep it' }
+  SiteUrl: { Type: String, Default: 'https://example.invalid/', Description: 'Address written in invitation emails' }
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !Ref PoolName
+      DeletionProtection: ACTIVE
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+        InviteMessageTemplate:
+          EmailSubject: 'INTERNAL BETA - Demeisen invitation'
+          EmailMessage: !Sub >-
+            <p><strong>INTERNAL BETA - Demeisen LLP internal use only</strong></p>
+            <p>You have been invited to Demeisen's internal sites (intranet and CRM). The applications are an internal
+            beta and will change. The data in them is not a test: it is Demeisen's live records, so changes you make are
+            saved for real. It is confidential, so please do not share it, this email or the link.</p>
+            <p>Site: ${SiteUrl}<br>Username: {username}<br>Temporary password: {####}</p>
+            <p>When you first sign in you will choose a new password (at least 14 characters, with upper and lower case,
+            a number and a symbol) and set up an authenticator app for a 6-digit sign-in code.
+            The temporary password expires in 7 days.</p>
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+        EmailSubject: 'INTERNAL BETA - Demeisen verification code'
+        EmailMessage: '<p><strong>INTERNAL BETA - Demeisen LLP internal use only</strong></p><p>Your Demeisen verification code is {####}</p>'
+      MfaConfiguration: 'ON'
+      EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      Policies:
+        PasswordPolicy: { MinimumLength: 14, RequireLowercase: true, RequireUppercase: true, RequireNumbers: true, RequireSymbols: true }
+      AccountRecoverySetting:
+        RecoveryMechanisms: [{ Name: verified_email, Priority: 1 }]
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: { Domain: !Ref DomainPrefix, UserPoolId: !Ref UserPool }
+
+Outputs:
+  UserPoolId: { Value: !Ref UserPool }
+  Issuer: { Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}' }
+  SignInDomain: { Value: !Sub '${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com' }

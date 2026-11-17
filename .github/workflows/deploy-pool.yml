@@ -1,0 +1,35 @@
+# Applies pool/demeisen-pool.yaml and pool/refs.yaml. Run by hand; needs approval in the "data" environment
+# (Settings > Environments > data > Required reviewers). The stack policy still refuses to replace or delete the pool.
+name: Deploy pool
+on:
+  workflow_dispatch:
+    inputs:
+      site_url: { description: 'Address for invitation emails (blank: the v2 front door)', required: false }
+permissions: { id-token: write, contents: read }
+concurrency: data
+env:
+  AWS_REGION: eu-west-2
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: data
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install cfn-lint pyyaml && cfn-lint pool/*.yaml && python3 tools/check-guardrails.py pool/demeisen-pool.yaml
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/demeisen-v2-github-auth-data
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Show the changes, then apply them
+        run: |
+          set -euo pipefail
+          EXEC=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/demeisen-v2-cfn-exec
+          SITE="${{ inputs.site_url }}"
+          [ -n "$SITE" ] || SITE=$(aws ssm get-parameter --name /demeisen/v2/edge/url --query Parameter.Value --output text 2>/dev/null || echo 'https://example.invalid/')
+          aws cloudformation deploy --stack-name demeisen-v2-auth-refs --template-file pool/refs.yaml --role-arn "$EXEC" --no-fail-on-empty-changeset
+          if aws cloudformation describe-stacks --stack-name demeisen-v2-auth-pool >/dev/null 2>&1; then
+            aws cloudformation deploy --stack-name demeisen-v2-auth-pool --template-file pool/demeisen-pool.yaml --role-arn "$EXEC" \
+              --parameter-overrides SiteUrl="$SITE" --no-fail-on-empty-changeset
+          else
+            echo "demeisen-v2-auth-pool does not exist yet: the pool is still held by v1 until cut-over (pool/import.sh)."
+          fi

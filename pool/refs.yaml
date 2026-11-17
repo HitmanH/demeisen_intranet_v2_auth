@@ -1,0 +1,20 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Where apps find the shared sign-in: three SSM parameters under /demeisen/v2/auth/. Kept apart from the pool's own
+  stack so the pool can be imported (an import change set may contain nothing else) and so apps never take a
+  CloudFormation export on the pool, which would lock it in place.
+
+Parameters:
+  UserPoolId: { Type: String, Default: eu-west-2_o84PDILyl }
+  DomainPrefix: { Type: String, Default: demeisen-crm-poc }
+
+Resources:
+  PoolIdParam:
+    Type: AWS::SSM::Parameter
+    Properties: { Name: /demeisen/v2/auth/user-pool-id, Type: String, Value: !Ref UserPoolId }
+  IssuerParam:
+    Type: AWS::SSM::Parameter
+    Properties: { Name: /demeisen/v2/auth/issuer, Type: String, Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}' }
+  DomainParam:
+    Type: AWS::SSM::Parameter
+    Properties: { Name: /demeisen/v2/auth/domain, Type: String, Value: !Sub '${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com' }

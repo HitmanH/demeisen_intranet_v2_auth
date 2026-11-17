@@ -36,10 +36,17 @@ API Gateway JWT authorizer; they don't need the Python file.
 Invite: Cognito console → user pool → Users → Create user (send an email invitation). Remove access to everything:
 disable or delete the user there. Each app can additionally restrict who it admits.
 
-## Current Demeisen set-up
+## Current Demeisen set-up (v2)
 
-The shared user pool is the one created by the CRM's stack (`demeisen-crm-poc`). The intranet is registered with
-it through `cognito/app-client.yaml` (stack `demeisen-intranet-signin`). Moving the pool's ownership out of the CRM
-stack into its own stack (CloudFormation resource import, with `DeletionPolicy: Retain`) is a later, separate step;
-until then, don't delete the CRM stack. The CRM can still be deployed elsewhere on its own: its template creates
-its own user pool.
+- `pool/demeisen-pool.yaml`: Demeisen's own user pool, stack `demeisen-v2-auth-pool`. The pool is data (people and
+  their authenticator enrolment), so it and its sign-in domain are kept if the stack is deleted, deletion protection
+  is on, and `pool/stack-policy.json` blocks any update that would replace or delete them. `tools/check-guardrails.py`
+  fails CI if any of that is removed.
+- The pool already exists (`eu-west-2_o84PDILyl`, created by the v1 CRM stack). It is adopted into
+  `demeisen-v2-auth-pool` with `pool/import.sh` at cut-over, without touching any user. Until then v1 holds it, with
+  `DeletionPolicy: Retain` added so that removing v1 can never delete it.
+- `pool/refs.yaml` (stack `demeisen-v2-auth-refs`): SSM parameters `/demeisen/v2/auth/user-pool-id`, `issuer` and
+  `domain`. Apps read these rather than a CloudFormation export, so nothing locks the pool in place.
+- Apps register their own clients: the CRM (browser, public client) in its app stack, the platform (server,
+  confidential client) in its app stack.
+- Changes to the pool run only from the **Deploy pool** workflow, after approval in the GitHub `data` environment.

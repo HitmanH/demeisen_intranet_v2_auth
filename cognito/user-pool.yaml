@@ -16,6 +16,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       UserPoolName: !Ref PoolName
+      DeletionProtection: ACTIVE
       UsernameAttributes: [email]
       AutoVerifiedAttributes: [email]
       AdminCreateUserConfig:
@@ -40,6 +41,8 @@ Resources:
         RecoveryMechanisms: [{ Name: verified_email, Priority: 1 }]
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties: { Domain: !Ref DomainPrefix, UserPoolId: !Ref UserPool }
 
 Outputs:

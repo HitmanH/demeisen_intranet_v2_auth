@@ -1,0 +1,21 @@
+# Checks every push and pull request: templates are valid, data protections are intact, scripts and code parse.
+name: CI
+on: [push, pull_request]
+permissions: { contents: read }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install cfn-lint pyyaml 'PyJWT[crypto]' flask
+      - name: Templates
+        run: cfn-lint pool/*.yaml cognito/*.yaml
+      - name: Data protections
+        run: python3 tools/check-guardrails.py pool/demeisen-pool.yaml cognito/user-pool.yaml
+      - name: Code
+        run: |
+          python3 -m py_compile python/demeisen_auth.py inline.py tools/check-guardrails.py
+          node --check js/demeisen-auth.js
+          shellcheck pool/import.sh
